@@ -1581,6 +1581,14 @@ function showContextMenu(x, y, node) {
       </svg>
       Properties
     </div>
+    <div class="ctx-menu__item" id="ctxDownload">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Download
+    </div>
     <div class="ctx-menu__sep"></div>
     <div class="ctx-menu__item" id="ctxRename">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1608,6 +1616,12 @@ function showContextMenu(x, y, node) {
     const n = getNode(ctxTargetId);
     hideContextMenu();
     if (n) { showDetail(n); appLayout.classList.add('detail-open'); }
+  });
+  const ctxDl = document.getElementById('ctxDownload');
+  if (ctxDl) ctxDl.addEventListener('click', () => {
+    const id = ctxTargetId;
+    hideContextMenu();
+    downloadNodes([id]);
   });
   document.getElementById('ctxRename').addEventListener('click', () => {
     const id = ctxTargetId;
@@ -1860,6 +1874,9 @@ function updateSelectionBar() {
     return node && node.type === 'file' && isMedia(node.name) && node.file;
   })();
   selPreviewBtn.style.display = oneMedia ? 'inline-flex' : 'none';
+
+  // Show download btn
+  if (selDownloadBtn) selDownloadBtn.style.display = 'inline-flex';
 
   // Show move btn (always visible when items selected)
   const selMoveBtn = document.getElementById('selMoveBtn');
@@ -2414,6 +2431,14 @@ mainPanel.addEventListener('drop', newDropHandler);
 
 // INIT removed from here, moved to openDB promise
 
+const selDownloadBtn = document.getElementById('selDownloadBtn');
+if (selDownloadBtn) {
+  selDownloadBtn.addEventListener('click', () => {
+    const ids = [...selectedIds];
+    if (ids.length) downloadNodes(ids);
+  });
+}
+
 // ── selDeleteBtn ─────────────────────────────────
 const selDeleteBtn = document.getElementById('selDeleteBtn');
 if (selDeleteBtn) {
@@ -2591,3 +2616,68 @@ if (loginBtn) loginBtn.addEventListener('click', doLogin);
 if (loginNameInput) loginNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
 refreshUI();
+
+// ================================================
+//  DOWNLOAD FILES / FOLDERS
+// ================================================
+async function downloadNodes(ids) {
+  if (!ids.length) return;
+  showToast(`⏳ Memproses unduhan untuk ${ids.length} item...`, 'success');
+
+  for (const id of ids) {
+    const node = getNode(id);
+    if (!node) continue;
+
+    if (node.type === 'file' && node.file) {
+      // Direct file download
+      const url = URL.createObjectURL(node.file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = node.name;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
+    } else if (node.type === 'folder') {
+      // Folder download via JSZip
+      if (typeof JSZip === 'undefined') {
+        showToast('❌ JSZip library tidak ditemukan', 'error');
+        continue;
+      }
+      
+      const zip = new JSZip();
+      
+      const addFolderToZip = (folderNode, currentZip) => {
+        folderNode.children.forEach(child => {
+          if (child.type === 'file' && child.file) {
+            currentZip.file(child.name, child.file);
+          } else if (child.type === 'folder') {
+            const newZipFolder = currentZip.folder(child.name);
+            addFolderToZip(child, newZipFolder);
+          }
+        });
+      };
+      
+      addFolderToZip(node, zip);
+      
+      try {
+        const content = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = node.name + '.zip';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 1000);
+      } catch (err) {
+        console.error('Zip generation error:', err);
+        showToast(`❌ Gagal mengompres folder ${node.name}`, 'error');
+      }
+    }
+  }
+}
