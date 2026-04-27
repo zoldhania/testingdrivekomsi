@@ -122,7 +122,8 @@ function buildFolderIcon(size = 48, open = false) {
  * { id, name, type: 'folder'|'file', path, children: [], file: File|null, parent: nodeId|null }
  */
 let repoRoot = { id: 'root', name: 'root', type: 'folder', path: '', children: [], file: null, parent: null };
-let nodeMap = { root: repoRoot };
+let recycleRoot = { id: 'recycle_bin', name: 'Recycle Bin', type: 'folder', path: 'recycle_bin', children: [], file: null, parent: null };
+let nodeMap = { root: repoRoot, recycle_bin: recycleRoot };
 let nodeIdSeq = 0;
 let totalFiles = 0;
 let currentPath = ''; // root = ''
@@ -203,6 +204,14 @@ function loadRecycleBin() {
   // Auto-purge entries older than 30 days
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   recycleBin = recycleBin.filter(e => e.deletedAt > cutoff);
+
+  // Re-attach node references from nodeMap
+  recycleBin.forEach(e => {
+    e.node = getNode(e.id);
+  });
+  // Filter out any entries that lost their node (permanently deleted from DB)
+  recycleBin = recycleBin.filter(e => e.node);
+
   saveRecycleBin();
 }
 
@@ -249,15 +258,17 @@ function softDeleteNodes(ids) {
       parentId: node.parent, node,
       deletedAt: Date.now(), deletedBy: currentUser.name,
     });
-    // Remove from tree
+    // Remove from active tree but keep in memory/DB
     const parent = getNode(node.parent || 'root');
     if (parent) parent.children = parent.children.filter(c => c.id !== id);
+
+    // Attach to recycle_bin root
+    node.parent = 'recycle_bin';
+    nodeMap['recycle_bin'].children.push(node);
+    dbSaveNode(node);
+
     if (node.type === 'file') totalFiles--;
     else totalFiles -= countFiles(node);
-    // Remove from nodeMap
-    function removeMap(n) { delete nodeMap[n.id]; n.children.forEach(removeMap); }
-    removeMap(node);
-    dbDeleteSubtree(node);
   });
   saveRecycleBin();
   selectedIds.clear();
@@ -267,22 +278,105 @@ function softDeleteNodes(ids) {
   refreshUI();
 }
 
-function restoreNode(binEntry) {
+function restoreNode(binEntry, targetParentId = null) {
   // Re-insert node back into its original parent (fall back to root)
-  const parentId = nodeMap[binEntry.parentId] ? binEntry.parentId : 'root';
+  const parentId = targetParentId
+    ? targetParentId
+    : (nodeMap[binEntry.parentId] ? binEntry.parentId : 'root');
   const node = binEntry.node;
   node.parent = parentId;
+  // Remove from recycle_bin tree
+  const rbNode = nodeMap['recycle_bin'];
+  if (rbNode) rbNode.children = rbNode.children.filter(c => c.id !== node.id);
+
+  // Update path based on new parent
+  const parentNode = getNode(parentId);
+  node.path = parentNode && parentNode.path ? parentNode.path + '/' + node.name : node.name;
   nodeMap[node.id] = node;
-  const parent = getNode(parentId);
-  if (parent && !parent.children.find(c => c.id === node.id)) parent.children.push(node);
+  if (parentNode && !parentNode.children.find(c => c.id === node.id)) parentNode.children.push(node);
   if (node.type === 'file') totalFiles++;
   else totalFiles += countFiles(node);
   dbSaveNode(node);
   recycleBin = recycleBin.filter(e => e.id !== binEntry.id);
   saveRecycleBin();
-  showToast(`✅ "${node.name}" dipulihkan`, 'success');
+  const destName = parentNode ? (parentNode.id === 'root' ? 'Home' : parentNode.name) : 'Home';
+  showToast(`✅ "${node.name}" dipulihkan ke folder "${destName}"`, 'success');
   refreshUI();
   renderRecycleBinList();
+}
+
+// Pending recycle-bin restore: bin entry waiting for folder selection
+let _pendingRestoreBinEntry = null;
+
+function restoreNodeToFolder(binEntry) {
+  _pendingRestoreBinEntry = binEntry;
+  // Temporarily add node back to nodeMap so openMoveModal can exclude it if it's a folder
+  const node = binEntry.node;
+  const excludeIds = node.type === 'folder' ? [node.id] : [];
+
+  // Build the folder picker (re-use openMoveModal internals)
+  moveTargetIds = [];
+  moveSelectedFolderId = null;
+  moveFolderTree.innerHTML = '';
+  moveFolderTree._moveExpandMap = {};
+  if (moveConfirmBtn) moveConfirmBtn.disabled = true;
+
+  // Update modal title to reflect restore context
+  const titleEl = document.getElementById('moveModalTitle');
+  if (titleEl) titleEl.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+    Kembalikan ke Folder`;
+
+  // Build home/root row
+  const homeRow = document.createElement('div');
+  homeRow.className = 'move-tree-node';
+  const rootItem = document.createElement('div');
+  rootItem.className = 'move-tree-item';
+  rootItem.style.paddingLeft = '8px';
+  rootItem.dataset.id = 'root';
+  const rootHasSubs = repoRoot.children.some(c => c.type === 'folder' && !excludeIds.includes(c.id));
+  const rootIsExp = true;
+  rootItem.innerHTML = `
+    <span class="move-tree-arrow ${rootHasSubs ? '' : 'hidden'} open">
+      <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 2 8 6 4 10"/></svg>
+    </span>
+    <svg viewBox="0 0 20 20" fill="none" class="move-tree-icon">
+      <path d="M10 3L2 9h3v8h4v-5h2v5h4V9h3L10 3z" fill="#0066B3" fill-opacity="0.3" stroke="#0066B3" stroke-width="1.2"/>
+    </svg>
+    <span class="move-tree-label">🏠 Home (root)</span>`;
+
+  const rootChildrenWrap = document.createElement('div');
+  rootChildrenWrap.className = 'move-tree-children';
+  rootChildrenWrap._moveExpandMap = moveFolderTree._moveExpandMap;
+
+  const homeArrow = rootItem.querySelector('.move-tree-arrow');
+  if (homeArrow && rootHasSubs) {
+    homeArrow.addEventListener('click', e => {
+      e.stopPropagation();
+      const nowExp = moveFolderTree._moveExpandMap['root'] !== false;
+      moveFolderTree._moveExpandMap['root'] = !nowExp;
+      rootChildrenWrap.style.display = moveFolderTree._moveExpandMap['root'] === false ? 'none' : '';
+      homeArrow.classList.toggle('open', moveFolderTree._moveExpandMap['root'] !== false);
+    });
+  }
+
+  rootItem.addEventListener('click', e => {
+    if (e.target.closest('.move-tree-arrow')) return;
+    moveFolderTree.querySelectorAll('.move-tree-item.selected').forEach(el => el.classList.remove('selected'));
+    rootItem.classList.add('selected');
+    moveSelectedFolderId = 'root';
+    if (moveConfirmBtn) moveConfirmBtn.disabled = false;
+  });
+
+  buildMoveFolderTree(rootChildrenWrap, repoRoot, excludeIds, 1);
+  homeRow.appendChild(rootItem);
+  homeRow.appendChild(rootChildrenWrap);
+  moveFolderTree.appendChild(homeRow);
+
+  moveModal.classList.remove('hidden');
 }
 
 function permanentDeleteFromBin(binEntry) {
@@ -290,6 +384,10 @@ function permanentDeleteFromBin(binEntry) {
   recycleBin = recycleBin.filter(e => e.id !== binEntry.id);
   saveRecycleBin();
   dbDeleteSubtree(binEntry.node);
+  // Clean up from nodeMap memory
+  function removeMap(n) { delete nodeMap[n.id]; n.children.forEach(removeMap); }
+  if (binEntry.node) removeMap(binEntry.node);
+
   showToast('🗑️ File dihapus permanen', 'success');
   renderRecycleBinList();
 }
@@ -315,7 +413,10 @@ function renderRecycleBinList() {
         <div class="recycle-item__meta">Dihapus oleh <strong>${escapeHtml(entry.deletedBy)}</strong> · <span style="${remainingColor}">${remaining} hari tersisa</span></div>
       </span>
       <div class="recycle-item__btns">
-        <button class="btn btn--ghost sel-btn" data-restore="${entry.id}">Pulihkan</button>
+        <button class="btn btn--primary sel-btn" data-restore="${entry.id}" title="Pulihkan ke folder asal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;margin-right:3px"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+          Pulihkan
+        </button>
         ${canDelete() ? `<button class="btn btn--danger sel-btn" data-perm="${entry.id}">Hapus</button>` : ''}
       </div>
     `;
@@ -410,7 +511,7 @@ async function restoreFromDB() {
 
     // First pass — create all node shells
     records.forEach(rec => {
-      if (rec.id === 'root') return;
+      if (rec.id === 'root' || rec.id === 'recycle_bin') return;
       const seq = parseInt(rec.id.replace('n', ''), 10);
       if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
 
@@ -468,6 +569,10 @@ openDB()
   .then(() => {
     setDbStatus('connected', '💾 DB OK');
     return restoreFromDB();
+  })
+  .then(() => {
+    // Load recycle bin after DB is restored so nodes are matched
+    loadRecycleBin();
   })
   .catch(err => {
     console.error('DB open error:', err);
@@ -781,7 +886,7 @@ function renderFiles() {
   // Sort: folders first, then files, then apply currentSortMode
   const sorted = [...children].sort((a, b) => {
     if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-    
+
     if (currentSortMode === 'name_asc') {
       return a.name.localeCompare(b.name);
     } else if (currentSortMode === 'name_desc') {
@@ -1260,21 +1365,21 @@ function formatStorageUsed(bytes) {
   const gb = bytes / (1024 ** 3);
   const mb = bytes / (1024 ** 2);
   if (tb >= 0.5) return tb.toFixed(2) + ' TB';
-  if (gb >= 1)   return gb.toFixed(1) + ' GB';
+  if (gb >= 1) return gb.toFixed(1) + ' GB';
   return mb.toFixed(0) + ' MB';
 }
 
 function updateStorageWidget() {
-  const fill   = document.getElementById('storageFill');
-  const pct    = document.getElementById('storagePct');
+  const fill = document.getElementById('storageFill');
+  const pct = document.getElementById('storagePct');
   const usedEl = document.getElementById('storageUsed');
   const widget = document.getElementById('storageWidget');
   if (!fill || !pct || !usedEl) return;
 
   const usedBytes = calcTotalSizeBytes();
-  const usedTB    = usedBytes / (1024 ** 4);
-  const ratio     = Math.min(usedTB / STORAGE_TOTAL_TB, 1);
-  const pctVal    = Math.round(ratio * 100);
+  const usedTB = usedBytes / (1024 ** 4);
+  const ratio = Math.min(usedTB / STORAGE_TOTAL_TB, 1);
+  const pctVal = Math.round(ratio * 100);
 
   // Colour thresholds
   let color = '#059669'; // green < 70%
@@ -1283,7 +1388,7 @@ function updateStorageWidget() {
 
   widget.style.setProperty('--storage-color', color);
   fill.style.width = pctVal + '%';
-  pct.textContent  = pctVal + '%';
+  pct.textContent = pctVal + '%';
   usedEl.textContent = formatStorageUsed(usedBytes);
 }
 
@@ -1959,10 +2064,37 @@ function closeMoveModal() {
   moveModal.classList.add('hidden');
   moveTargetIds = [];
   moveSelectedFolderId = null;
+  // If closed while in restore-to-folder mode, reset title and pending entry
+  if (_pendingRestoreBinEntry) {
+    _pendingRestoreBinEntry = null;
+    const titleEl = document.getElementById('moveModalTitle');
+    if (titleEl) titleEl.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+        <path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/>
+      </svg>
+      Pindahkan ke Folder`;
+  }
 }
 
 if (moveConfirmBtn) moveConfirmBtn.addEventListener('click', () => {
   if (!moveSelectedFolderId) return;
+
+  // Handle recycle-bin restore-to-folder flow
+  if (_pendingRestoreBinEntry) {
+    const entry = _pendingRestoreBinEntry;
+    _pendingRestoreBinEntry = null;
+    // Reset modal title
+    const titleEl = document.getElementById('moveModalTitle');
+    if (titleEl) titleEl.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+        <path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/>
+      </svg>
+      Pindahkan ke Folder`;
+    closeMoveModal();
+    restoreNode(entry, moveSelectedFolderId);
+    return;
+  }
+
   let movedCount = 0;
   moveTargetIds.forEach(id => {
     if (moveNode(id, moveSelectedFolderId)) movedCount++;
@@ -2280,10 +2412,7 @@ const newDropHandler = async e => {
 };
 mainPanel.addEventListener('drop', newDropHandler);
 
-// ================================================
-//  INIT
-// ================================================
-loadRecycleBin();
+// INIT removed from here, moved to openDB promise
 
 // ── selDeleteBtn ─────────────────────────────────
 const selDeleteBtn = document.getElementById('selDeleteBtn');
@@ -2400,7 +2529,13 @@ if (recycleClearAllBtn) recycleClearAllBtn.addEventListener('click', async () =>
     okClass: 'btn--danger',
   });
   if (!ok) return;
-  recycleBin.forEach(e => { if (e.node) dbDeleteSubtree(e.node); });
+  recycleBin.forEach(e => {
+    if (e.node) {
+      dbDeleteSubtree(e.node);
+      function removeMap(n) { delete nodeMap[n.id]; n.children.forEach(removeMap); }
+      removeMap(e.node);
+    }
+  });
   recycleBin = [];
   saveRecycleBin();
   renderRecycleBinList();
