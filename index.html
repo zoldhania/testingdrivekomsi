@@ -39,9 +39,42 @@
         </svg>
         Sistem ini hanya dapat diakses melalui jaringan <strong>VPN</strong>
       </div>
-      <div class="login-field">
-        <label>Nama Pengguna</label>
-        <input id="loginName" type="text" placeholder="Masukkan nama Anda…" maxlength="64" />
+
+      <!-- IHC IMPORT SECTION -->
+      <div class="ihc-section">
+        <div class="ihc-section__header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>Import Data Pegawai (IHC)</span>
+          <label class="ihc-import-btn" for="ihcFileInput" title="Import file CSV dari sistem IHC">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload CSV
+          </label>
+          <input type="file" id="ihcFileInput" accept=".csv,.txt" style="display:none" />
+        </div>
+        <div class="ihc-hint" id="ihcHint">Format CSV: NPP, Nama, Jabatan &mdash; <span id="ihcFileName">Belum ada file dipilih</span></div>
+        <div class="ihc-search-wrap" id="ihcSearchWrap" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ihc-search-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="ihcSearchInput" class="ihc-search-input" placeholder="Cari nama atau NPP…" autocomplete="off" />
+        </div>
+        <div id="ihcEmployeeList" class="ihc-employee-list"></div>
+        <div class="ihc-stats" id="ihcStats" style="display:none"></div>
+      </div>
+
+      <!-- MANUAL ENTRY (or auto-filled from IHC) -->
+      <div id="manualEntrySection" class="login-manual-section">
+        <div class="login-manual-label">Atau isi data manual</div>
+        <div class="login-field">
+          <label>NPP (Nomor Pokok Pegawai)</label>
+          <input id="loginNPP" type="text" placeholder="Contoh: 19890101001" maxlength="20" />
+        </div>
+        <div class="login-field">
+          <label>Nama Lengkap</label>
+          <input id="loginName" type="text" placeholder="Masukkan nama lengkap…" maxlength="64" />
+        </div>
+        <div class="login-field">
+          <label>Jabatan</label>
+          <input id="loginJabatan" type="text" placeholder="Contoh: Staf Komunikasi, Kepala Seksi…" maxlength="80" />
+        </div>
       </div>
       <div class="login-field">
         <label>Role / Jabatan</label>
@@ -122,9 +155,14 @@
       <!-- User info chip -->
       <div id="userChip" class="user-chip">
         <span id="userChipAvatar" class="user-chip__avatar">S</span>
-        <span id="userChipName" class="user-chip__name">User</span>
-        <span id="userChipRole" class="user-chip__role">Super Admin</span>
-        <button id="btnSwitchRole" class="user-chip__switch" title="Ganti role (demo)">⇄</button>
+        <div class="user-chip__info">
+          <span id="userChipName" class="user-chip__name">User</span>
+          <span id="userChipSub" class="user-chip__sub"></span>
+        </div>
+        <span id="userChipRole" class="user-chip__role super_admin">Super Admin</span>
+        <button id="btnLogout" class="user-chip__logout" title="Logout / Keluar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
       </div>
 
       <button id="btnAddFolder" class="btn btn--primary" title="Tambah folder baru">

@@ -242,7 +242,7 @@ function officeCanAccessNode(nodeId, officeId) {
 // ================================================
 //  USER ROLE & SESSION
 // ================================================
-let currentUser = { name: 'User', role: 'super_admin', officeId: null };
+let currentUser = { name: 'User', role: 'super_admin', officeId: null, npp: '', jabatan: '' };
 
 function canDelete()  { return currentUser.role === 'super_admin'; }
 function canRename()  { return currentUser.role === 'super_admin' || currentUser.role === 'admin'; }
@@ -250,8 +250,14 @@ function canUpload()  { return currentUser.role === 'super_admin' || currentUser
 function canShare()   { return currentUser.role === 'super_admin' || currentUser.role === 'admin'; }
 function isViewOnly() { return currentUser.role === 'kantor_cabang' || currentUser.role === 'kedeputian_wilayah'; }
 
-function setRole(role, name, officeId) {
-  currentUser = { name: name || currentUser.name, role, officeId: officeId || null };
+function setRole(role, name, officeId, npp, jabatan) {
+  currentUser = {
+    name:     name     || currentUser.name,
+    role,
+    officeId: officeId || null,
+    npp:      npp      || '',
+    jabatan:  jabatan  || '',
+  };
   sessionStorage.setItem('fv_user', JSON.stringify(currentUser));
   // Apply view-only body class
   if (isViewOnly()) {
@@ -277,9 +283,22 @@ function updateUserChip() {
   if (!chip) return;
   const avatar = document.getElementById('userChipAvatar');
   const nameEl = document.getElementById('userChipName');
+  const subEl  = document.getElementById('userChipSub');
   const roleEl = document.getElementById('userChipRole');
-  if (avatar) avatar.textContent = (currentUser.name || 'U')[0].toUpperCase();
-  if (nameEl) nameEl.textContent = currentUser.name;
+
+  const initials = (currentUser.name || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  if (avatar) {
+    avatar.textContent = initials;
+    avatar.title = currentUser.npp ? `NPP: ${currentUser.npp}` : '';
+  }
+  if (nameEl) nameEl.textContent = currentUser.name || 'User';
+  if (subEl) {
+    const parts = [];
+    if (currentUser.npp) parts.push(currentUser.npp);
+    if (currentUser.jabatan) parts.push(currentUser.jabatan);
+    subEl.textContent = parts.join(' • ');
+    subEl.title = parts.join(' • ');
+  }
   if (roleEl) {
     const labels = {
       super_admin:        'Super Admin',
@@ -2857,7 +2876,14 @@ const loginNameInput = document.getElementById('loginName');
 })();
 
 function doLogin() {
-  const name = (loginNameInput ? loginNameInput.value.trim() : '') || 'User';
+  const nameInput = document.getElementById('loginName');
+  const nppInput  = document.getElementById('loginNPP');
+  const jabInput  = document.getElementById('loginJabatan');
+
+  const name     = (nameInput ? nameInput.value.trim() : '') || 'User';
+  const npp      = nppInput  ? nppInput.value.trim()  : '';
+  const jabatan  = jabInput  ? jabInput.value.trim()  : '';
+
   const roleEl = document.querySelector('input[name="loginRole"]:checked');
   const role = roleEl ? roleEl.value : 'admin';
 
@@ -2870,10 +2896,9 @@ function doLogin() {
     return;
   }
 
-  setRole(role, name, officeId || null);
+  setRole(role, name, officeId || null, npp, jabatan);
   if (loginOverlay) loginOverlay.classList.add('hidden');
-  sessionStorage.setItem('fv_user', JSON.stringify({ name, role, officeId: officeId || null }));
-  showToast(`✅ Selamat datang, ${name}!`, 'success');
+  showToast('✅ Selamat datang, ' + name + '!', 'success');
   refreshUI();
 }
 
@@ -2882,7 +2907,7 @@ const savedUser = sessionStorage.getItem('fv_user');
 if (savedUser) {
   try {
     const u = JSON.parse(savedUser);
-    currentUser = u;
+    currentUser = { name: u.name || 'User', role: u.role || 'super_admin', officeId: u.officeId || null, npp: u.npp || '', jabatan: u.jabatan || '' };
     updateUserChip();
     // Re-apply view-only mode if branch role
     if (u.role === 'kantor_cabang' || u.role === 'kedeputian_wilayah') {
@@ -3176,4 +3201,150 @@ function saveShare() {
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) closeShareModal();
   });
+})();
+
+// ================================================
+//  LOGOUT
+// ================================================
+function doLogout() {
+  sessionStorage.removeItem('fv_user');
+  currentUser = { name: 'User', role: 'super_admin', officeId: null, npp: '', jabatan: '' };
+  document.body.classList.remove('view-only-mode');
+  const banner = document.getElementById('viewOnlyBanner');
+  if (banner) banner.classList.remove('visible');
+  const loginOverlayEl = document.getElementById('loginOverlay');
+  if (loginOverlayEl) loginOverlayEl.classList.remove('hidden');
+  // Reset IHC state
+  _ihcEmployees = [];
+  _ihcSelected = null;
+  const ihcListEl = document.getElementById('ihcEmployeeList');
+  if (ihcListEl) { ihcListEl.innerHTML = ''; ihcListEl.classList.remove('visible'); }
+  const ihcSearchWrap = document.getElementById('ihcSearchWrap');
+  if (ihcSearchWrap) ihcSearchWrap.style.display = 'none';
+  const ihcStats = document.getElementById('ihcStats');
+  if (ihcStats) ihcStats.style.display = 'none';
+  const ihcFileName = document.getElementById('ihcFileName');
+  if (ihcFileName) ihcFileName.textContent = 'Belum ada file dipilih';
+  // Clear manual fields
+  ['loginName','loginNPP','loginJabatan'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  // Reset role to super_admin
+  const sa = document.querySelector('input[name="loginRole"][value="super_admin"]');
+  if (sa) { sa.checked = true; sa.dispatchEvent(new Event('change')); }
+  updateUserChip();
+}
+
+const btnLogout = document.getElementById('btnLogout');
+if (btnLogout) btnLogout.addEventListener('click', doLogout);
+
+// ================================================
+//  IHC CSV IMPORT
+// ================================================
+let _ihcEmployees = [];  // [{npp, name, jabatan}]
+let _ihcSelected  = null;
+
+(function wireIHC() {
+  const fileInput    = document.getElementById('ihcFileInput');
+  const searchWrap   = document.getElementById('ihcSearchWrap');
+  const searchInput  = document.getElementById('ihcSearchInput');
+  const listEl       = document.getElementById('ihcEmployeeList');
+  const statsEl      = document.getElementById('ihcStats');
+  const fileNameEl   = document.getElementById('ihcFileName');
+
+  if (!fileInput) return;
+
+  // Parse CSV: support comma or semicolon separator, skip header if first cell is non-numeric
+  function parseIHC(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    const result = [];
+    lines.forEach((line, idx) => {
+      const cols = line.split(/[,;]/).map(c => c.trim().replace(/^["']|["']$/g, ''));
+      if (!cols.length) return;
+      const [npp, name, jabatan] = cols;
+      // Skip header line (first line if npp is not numeric-ish)
+      if (idx === 0 && !/^\d/.test(npp)) return;
+      if (!name) return;
+      result.push({ npp: npp || '', name, jabatan: jabatan || '' });
+    });
+    return result;
+  }
+
+  function renderList(query) {
+    if (!listEl) return;
+    const q = (query || '').toLowerCase().trim();
+    const filtered = _ihcEmployees.filter(e =>
+      !q ||
+      e.name.toLowerCase().includes(q) ||
+      e.npp.toLowerCase().includes(q) ||
+      (e.jabatan && e.jabatan.toLowerCase().includes(q))
+    ).slice(0, 50);
+
+    listEl.innerHTML = '';
+    if (!filtered.length) {
+      listEl.innerHTML = '<div style="padding:14px;text-align:center;color:#94A3B8;font-size:12px;">Tidak ada hasil</div>';
+      listEl.classList.add('visible');
+      return;
+    }
+    filtered.forEach(emp => {
+      const isSelected = _ihcSelected && _ihcSelected.npp === emp.npp && _ihcSelected.name === emp.name;
+      const item = document.createElement('div');
+      item.className = 'ihc-employee-item' + (isSelected ? ' selected' : '');
+      item.innerHTML =
+        '<span class="ihc-employee-item__npp">' + escapeHtml(emp.npp || '-') + '</span>' +
+        '<div class="ihc-employee-item__info">' +
+          '<div class="ihc-employee-item__name">' + escapeHtml(emp.name) + '</div>' +
+          '<div class="ihc-employee-item__jabatan">' + escapeHtml(emp.jabatan || '') + '</div>' +
+        '</div>' +
+        '<svg class="ihc-employee-item__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+      item.addEventListener('click', () => {
+        _ihcSelected = emp;
+        // Auto-fill the manual fields
+        const nameEl = document.getElementById('loginName');
+        const nppEl  = document.getElementById('loginNPP');
+        const jabEl  = document.getElementById('loginJabatan');
+        if (nameEl) nameEl.value = emp.name;
+        if (nppEl)  nppEl.value  = emp.npp;
+        if (jabEl)  jabEl.value  = emp.jabatan;
+        renderList(searchInput ? searchInput.value : '');
+        // Show green feedback
+        showToast('\u2705 Data pegawai dipilih: ' + emp.name, 'success');
+      });
+      listEl.appendChild(item);
+    });
+    listEl.classList.add('visible');
+  }
+
+  fileInput.addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    if (fileNameEl) fileNameEl.textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      _ihcEmployees = parseIHC(e.target.result);
+      _ihcSelected  = null;
+      if (searchWrap) searchWrap.style.display = 'block';
+      if (statsEl) {
+        statsEl.textContent = '\u2705 ' + _ihcEmployees.length + ' data pegawai berhasil dibaca dari ' + file.name;
+        statsEl.style.display = 'block';
+      }
+      renderList('');
+    };
+    reader.onerror = function() {
+      showToast('\u274c Gagal membaca file CSV', 'error');
+    };
+    reader.readAsText(file, 'UTF-8');
+    // Reset file input so same file can be re-uploaded
+    fileInput.value = '';
+  });
+
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      renderList(searchInput.value);
+    });
+    searchInput.addEventListener('focus', function() {
+      if (_ihcEmployees.length > 0) renderList(searchInput.value);
+    });
+  }
 })();

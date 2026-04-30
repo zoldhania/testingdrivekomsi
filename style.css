@@ -2333,3 +2333,251 @@ body.view-only-mode .dropzone { display: none !important; }
   flex-shrink: 0;
   border: 1px solid #F59E0B;
 }
+
+/* ================================================
+   IHC IMPORT SECTION (Login)
+   ================================================ */
+.ihc-section {
+  background: linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%);
+  border: 1.5px solid #BFDBFE;
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ihc-section__header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1D6FA8;
+}
+
+.ihc-import-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #1D6FA8;
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ihc-import-btn:hover { background: #155A8A; transform: translateY(-1px); }
+
+.ihc-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.ihc-stats {
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+}
+
+/* IHC Search */
+.ihc-search-wrap {
+  position: relative;
+}
+.ihc-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 13px;
+  height: 13px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.ihc-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 32px;
+  border: 1.5px solid #BFDBFE;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: var(--transition);
+}
+.ihc-search-input:focus {
+  border-color: #1D6FA8;
+  box-shadow: 0 0 0 3px rgba(29,111,168,0.12);
+}
+
+/* IHC Employee List */
+.ihc-employee-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #BFDBFE;
+  border-radius: var(--radius-sm);
+  background: white;
+  display: none;
+}
+.ihc-employee-list.visible { display: block; }
+.ihc-employee-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 1px solid #EFF6FF;
+  transition: background 0.12s;
+  user-select: none;
+}
+.ihc-employee-item:last-child { border-bottom: none; }
+.ihc-employee-item:hover { background: #EFF6FF; }
+.ihc-employee-item.selected { background: #ECFDF5; border-left: 3px solid #059669; }
+.ihc-employee-item__npp {
+  font-size: 10px;
+  font-weight: 700;
+  color: #1D6FA8;
+  background: #EFF6FF;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  font-family: 'Courier New', monospace;
+}
+.ihc-employee-item__info { flex: 1; min-width: 0; }
+.ihc-employee-item__name { font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ihc-employee-item__jabatan { font-size: 10px; color: var(--text-muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ihc-employee-item__check { width: 15px; height: 15px; color: #059669; opacity: 0; flex-shrink: 0; }
+.ihc-employee-item.selected .ihc-employee-item__check { opacity: 1; }
+
+/* Selected employee card */
+.ihc-selected-card {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #ECFDF5, #D1FAE5);
+  border: 1.5px solid #A7F3D0;
+  border-radius: var(--radius-sm);
+  animation: fadeIn 0.2s ease;
+}
+.ihc-selected-card.visible { display: flex; }
+.ihc-selected-card__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #059669, #047857);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.ihc-selected-card__info { flex: 1; min-width: 0; }
+.ihc-selected-card__name { font-size: 13px; font-weight: 700; color: #065F46; }
+.ihc-selected-card__meta { font-size: 11px; color: #059669; margin-top: 1px; }
+.ihc-selected-card__clear {
+  background: none;
+  border: none;
+  color: #DC2626;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+.ihc-selected-card__clear:hover { background: #FEE2E2; }
+
+/* Manual entry divider */
+.login-manual-section { display: flex; flex-direction: column; gap: 0; }
+.login-manual-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.login-manual-label::before,
+.login-manual-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Login box scrollable */
+.login-box {
+  max-height: 94vh;
+  overflow-y: auto;
+}
+
+/* ================================================
+   USER CHIP — UPDATED WITH SUB INFO + LOGOUT
+   ================================================ */
+.user-chip__info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.user-chip__name {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 12px;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-chip__sub {
+  font-size: 9px;
+  color: rgba(255,255,255,0.65);
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+  line-height: 1.2;
+}
+
+/* Logout button */
+.user-chip__logout {
+  width: 28px;
+  height: 28px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 50%;
+  cursor: pointer;
+  color: rgba(255,255,255,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  flex-shrink: 0;
+  padding: 0;
+  margin-left: 2px;
+}
+.user-chip__logout svg { width: 13px; height: 13px; }
+.user-chip__logout:hover {
+  background: rgba(220,38,38,0.35);
+  border-color: rgba(220,38,38,0.5);
+  color: #FCA5A5;
+  transform: scale(1.08);
+}
