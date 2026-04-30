@@ -45,12 +45,12 @@
       </div>
       <div class="login-field">
         <label>Role / Jabatan</label>
-        <div class="role-select-group">
+        <div class="role-select-group with-4">
           <label class="role-option" id="roleOptSA">
             <input type="radio" name="loginRole" value="super_admin" checked />
             <span class="role-option__box">
               <span class="role-option__title">Super Admin</span>
-              <span class="role-option__desc">Kelola folder, upload, rename, hapus file & user</span>
+              <span class="role-option__desc">Kelola folder, upload, rename, hapus file &amp; user</span>
             </span>
           </label>
           <label class="role-option" id="roleOptA">
@@ -60,6 +60,27 @@
               <span class="role-option__desc">Kelola folder, upload, rename file</span>
             </span>
           </label>
+          <label class="role-option" id="roleOptKC">
+            <input type="radio" name="loginRole" value="kantor_cabang" />
+            <span class="role-option__box role-option__box--branch">
+              <span class="role-option__title">&#x1F3E2; Kantor Cabang</span>
+              <span class="role-option__desc">Lihat folder yang dibagikan (view only)</span>
+            </span>
+          </label>
+          <label class="role-option" id="roleOptKW">
+            <input type="radio" name="loginRole" value="kedeputian_wilayah" />
+            <span class="role-option__box role-option__box--branch">
+              <span class="role-option__title">&#x1F3DB;&#xFE0F; Kedeputian Wilayah</span>
+              <span class="role-option__desc">Lihat folder yang dibagikan (view only)</span>
+            </span>
+          </label>
+        </div>
+        <!-- Office selector shown for branch/regional roles -->
+        <div class="office-select-wrap" id="officeSelectorWrap">
+          <label id="officeSelectorLabel">Pilih Kantor Cabang</label>
+          <select id="officeSelector">
+            <option value="">&#8212; Pilih kantor &#8212;</option>
+          </select>
         </div>
       </div>
       <button id="loginBtn" class="btn btn--primary btn--full">Masuk ke Sistem</button>
@@ -212,6 +233,12 @@
     <!-- MAIN PANEL -->
     <main class="main-panel">
 
+      <!-- VIEW-ONLY BANNER -->
+      <div class="view-only-banner" id="viewOnlyBanner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        Mode <strong>View Only</strong> — Anda hanya dapat melihat folder yang dibagikan ke kantor Anda.
+        <span id="viewOnlyOfficeName" style="margin-left:auto;font-weight:700;color:#78350F;"></span>
+      </div>
       <!-- BREADCRUMB -->
       <div class="breadcrumb" id="breadcrumb">
         <span class="bc-item bc-home" data-path="">🏠 Home</span>
@@ -491,6 +518,93 @@
       <div class="confirm-box__actions">
         <button id="confirmCancelBtn" class="btn btn--ghost">Batal</button>
         <button id="confirmOkBtn" class="btn btn--danger">Ya, Hapus</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHARE TO MODAL -->
+  <div id="shareModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
+    <div class="share-modal-box">
+      <!-- Header -->
+      <div class="share-modal__header">
+        <div class="share-modal__title">
+          <div class="share-modal__title-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+          </div>
+          <div>
+            <div id="shareModalTitle">Bagikan Folder</div>
+            <div style="font-size:12px;font-weight:400;color:var(--text-muted);margin-top:2px;" id="shareModalFolderName"></div>
+          </div>
+        </div>
+        <button class="share-modal__close" id="shareModalClose">✕</button>
+      </div>
+
+      <!-- Body -->
+      <div class="share-modal__body">
+
+        <!-- Section: Pilih Kantor -->
+        <div>
+          <div class="share-section-label">Pilih Kantor Cabang / Wilayah</div>
+          <div class="share-search-wrap">
+            <svg class="share-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="shareSearchInput" class="share-search-input" placeholder="Cari kantor cabang atau kedeputian wilayah…" autocomplete="off" />
+          </div>
+          <div id="shareOfficeList" class="share-office-list"></div>
+        </div>
+
+        <!-- Section: Dipilih -->
+        <div>
+          <div class="share-section-label">Kantor yang Dipilih</div>
+          <div id="shareChipsArea" class="share-chips-area">
+            <span class="share-chips-empty">Belum ada kantor dipilih</span>
+          </div>
+        </div>
+
+        <!-- Section: Tanggal Expired -->
+        <div>
+          <div class="share-section-label">Masa Berlaku Akses</div>
+          <div class="share-expiry-row">
+            <input type="date" id="shareExpireDate" class="share-date-input" />
+            <div class="share-preset-btns">
+              <button class="share-preset-btn" data-days="7">7 Hari</button>
+              <button class="share-preset-btn" data-days="30">30 Hari</button>
+              <button class="share-preset-btn" data-days="90">90 Hari</button>
+              <button class="share-preset-btn" data-days="365">1 Tahun</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Sharing Aktif Saat Ini -->
+        <div id="currentSharesSection" style="display:none">
+          <div class="share-section-label">Akses yang Sudah Dibagikan</div>
+          <div id="currentSharesList" class="current-shares-list"></div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="share-modal__footer">
+        <div class="share-modal__hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          Akses otomatis berakhir saat expired
+        </div>
+        <div class="share-modal__actions">
+          <button id="shareModalCancel" class="btn btn--ghost" style="background:#F1F5F9;color:#64748B;border:1px solid #E2E8F0;">Batal</button>
+          <button id="shareModalConfirm" class="btn--share" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+            Bagikan
+          </button>
+        </div>
       </div>
     </div>
   </div>

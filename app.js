@@ -107,10 +107,12 @@ function buildFileIcon(name, size = 48) {
   </svg>`;
 }
 
-function buildFolderIcon(size = 48, open = false) {
+function buildFolderIcon(size = 48, open = false, shared = false) {
+  const col = shared ? '#D97706' : '#0066B3';
+  const fillOp = shared ? '0.25' : '0.2';
   return `<svg viewBox="0 0 ${size} ${size}" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M6 ${Math.round(size * 0.32)}h${Math.round(size * 0.31)}l${Math.round(size * 0.12)} ${Math.round(size * 0.12)}h${Math.round(size * 0.37)}v${Math.round(size * 0.44)}H6z" fill="#0066B3" fill-opacity="0.2" stroke="#0066B3" stroke-width="1.5" stroke-linejoin="round"/>
-    ${open ? `<path d="M6 ${Math.round(size * 0.44)}l${Math.round(size * 0.05)}-${Math.round(size * 0.12)}h${Math.round(size * 0.75)}l-${Math.round(size * 0.06)} ${Math.round(size * 0.44)}H6z" fill="#0066B3" fill-opacity="0.35"/>` : ''}
+    <path d="M6 ${Math.round(size * 0.32)}h${Math.round(size * 0.31)}l${Math.round(size * 0.12)} ${Math.round(size * 0.12)}h${Math.round(size * 0.37)}v${Math.round(size * 0.44)}H6z" fill="${col}" fill-opacity="${fillOp}" stroke="${col}" stroke-width="1.5" stroke-linejoin="round"/>
+    ${open ? `<path d="M6 ${Math.round(size * 0.44)}l${Math.round(size * 0.05)}-${Math.round(size * 0.12)}h${Math.round(size * 0.75)}l-${Math.round(size * 0.06)} ${Math.round(size * 0.44)}H6z" fill="${col}" fill-opacity="0.35"/>` : ''}
   </svg>`;
 }
 
@@ -135,16 +137,137 @@ let lastClickedIdx = -1; // for shift+click range
 let iconSizeLevel = 2; // 1=small 2=medium 3=large
 
 // ================================================
+//  BRANCH OFFICES LIST
+// ================================================
+const BRANCH_OFFICES = [
+  // === KANTOR CABANG ===
+  { id: 'kc_jakarta_pusat',     name: 'KC Jakarta Pusat',       type: 'cabang' },
+  { id: 'kc_jakarta_selatan',   name: 'KC Jakarta Selatan',     type: 'cabang' },
+  { id: 'kc_jakarta_utara',     name: 'KC Jakarta Utara',       type: 'cabang' },
+  { id: 'kc_jakarta_barat',     name: 'KC Jakarta Barat',       type: 'cabang' },
+  { id: 'kc_jakarta_timur',     name: 'KC Jakarta Timur',       type: 'cabang' },
+  { id: 'kc_surabaya',         name: 'KC Surabaya',             type: 'cabang' },
+  { id: 'kc_bandung',          name: 'KC Bandung',              type: 'cabang' },
+  { id: 'kc_medan',            name: 'KC Medan',                type: 'cabang' },
+  { id: 'kc_semarang',         name: 'KC Semarang',             type: 'cabang' },
+  { id: 'kc_yogyakarta',       name: 'KC Yogyakarta',           type: 'cabang' },
+  { id: 'kc_makassar',         name: 'KC Makassar',             type: 'cabang' },
+  { id: 'kc_palembang',        name: 'KC Palembang',            type: 'cabang' },
+  { id: 'kc_batam',            name: 'KC Batam',                type: 'cabang' },
+  { id: 'kc_pekanbaru',        name: 'KC Pekanbaru',            type: 'cabang' },
+  { id: 'kc_denpasar',         name: 'KC Denpasar',             type: 'cabang' },
+  { id: 'kc_balikpapan',       name: 'KC Balikpapan',           type: 'cabang' },
+  { id: 'kc_manado',           name: 'KC Manado',               type: 'cabang' },
+  { id: 'kc_pontianak',        name: 'KC Pontianak',            type: 'cabang' },
+  { id: 'kc_malang',           name: 'KC Malang',               type: 'cabang' },
+  { id: 'kc_bogor',            name: 'KC Bogor',                type: 'cabang' },
+  // === KEDEPUTIAN WILAYAH ===
+  { id: 'kw_sumatera_utara',   name: 'Kedeputian Wilayah Sumatera Utara',   type: 'wilayah' },
+  { id: 'kw_sumatera_selatan', name: 'Kedeputian Wilayah Sumatera Selatan', type: 'wilayah' },
+  { id: 'kw_jawa_barat',       name: 'Kedeputian Wilayah Jawa Barat',       type: 'wilayah' },
+  { id: 'kw_jawa_tengah',      name: 'Kedeputian Wilayah Jawa Tengah',      type: 'wilayah' },
+  { id: 'kw_jawa_timur',       name: 'Kedeputian Wilayah Jawa Timur',       type: 'wilayah' },
+  { id: 'kw_kalimantan',       name: 'Kedeputian Wilayah Kalimantan',       type: 'wilayah' },
+  { id: 'kw_sulawesi',         name: 'Kedeputian Wilayah Sulawesi',         type: 'wilayah' },
+  { id: 'kw_bali_nusra',       name: 'Kedeputian Wilayah Bali & Nusra',    type: 'wilayah' },
+  { id: 'kw_maluku_papua',     name: 'Kedeputian Wilayah Maluku & Papua',  type: 'wilayah' },
+  { id: 'kw_dki',              name: 'Kedeputian Wilayah DKI Jakarta',      type: 'wilayah' },
+];
+
+// ================================================
+//  SHARE REGISTRY
+// ================================================
+// Structure: { [nodeId]: { shares: [{officeId, expiredAt}], sharedAt, sharedBy } }
+let shareRegistry = {};
+
+function loadShareRegistry() {
+  try { shareRegistry = JSON.parse(localStorage.getItem('fv_shares') || '{}'); } catch { shareRegistry = {}; }
+  // Auto-clean entries older than 1 year + 30 days to save space
+  const cutoff = Date.now() - 395 * 24 * 60 * 60 * 1000;
+  Object.keys(shareRegistry).forEach(nodeId => {
+    const reg = shareRegistry[nodeId];
+    if (reg.shares) reg.shares = reg.shares.filter(s => s.expiredAt > cutoff);
+    if (!reg.shares || !reg.shares.length) delete shareRegistry[nodeId];
+  });
+  saveShareRegistry();
+}
+
+function saveShareRegistry() {
+  localStorage.setItem('fv_shares', JSON.stringify(shareRegistry));
+}
+
+/** Get active (non-expired) shares for a node */
+function getActiveShares(nodeId) {
+  const reg = shareRegistry[nodeId];
+  if (!reg || !reg.shares) return [];
+  const now = Date.now();
+  return reg.shares.filter(s => s.expiredAt > now);
+}
+
+/** Check if a specific office has active access to a node */
+function isSharedWithOffice(nodeId, officeId) {
+  return getActiveShares(nodeId).some(s => s.officeId === officeId);
+}
+
+/** Check if a node (folder) is shared with ANY office (for visual badge) */
+function isFolderShared(nodeId) {
+  const reg = shareRegistry[nodeId];
+  if (!reg || !reg.shares || !reg.shares.length) return false;
+  return reg.shares.some(s => s.expiredAt > Date.now());
+}
+
+/** Check if a node was shared but ALL shares are expired */
+function isFolderExpiredShare(nodeId) {
+  const reg = shareRegistry[nodeId];
+  if (!reg || !reg.shares || !reg.shares.length) return false;
+  const now = Date.now();
+  const hasAny = reg.shares.length > 0;
+  const allExpired = reg.shares.every(s => s.expiredAt <= now);
+  return hasAny && allExpired;
+}
+
+/**
+ * Check if office has access to nodeId OR any ancestor folder.
+ * This enables recursive folder visibility: if parent shared, subfolders visible.
+ */
+function officeCanAccessNode(nodeId, officeId) {
+  let cur = getNode(nodeId);
+  while (cur && cur.id !== 'root') {
+    if (isSharedWithOffice(cur.id, officeId)) return true;
+    cur = cur.parent ? getNode(cur.parent) : null;
+  }
+  return false;
+}
+
+// ================================================
 //  USER ROLE & SESSION
 // ================================================
-let currentUser = { name: 'User', role: 'super_admin' };
+let currentUser = { name: 'User', role: 'super_admin', officeId: null };
 
-function canDelete() { return currentUser.role === 'super_admin'; }
-function canRename() { return true; }
+function canDelete()  { return currentUser.role === 'super_admin'; }
+function canRename()  { return currentUser.role === 'super_admin' || currentUser.role === 'admin'; }
+function canUpload()  { return currentUser.role === 'super_admin' || currentUser.role === 'admin'; }
+function canShare()   { return currentUser.role === 'super_admin' || currentUser.role === 'admin'; }
+function isViewOnly() { return currentUser.role === 'kantor_cabang' || currentUser.role === 'kedeputian_wilayah'; }
 
-function setRole(role, name) {
-  currentUser = { name: name || currentUser.name, role };
+function setRole(role, name, officeId) {
+  currentUser = { name: name || currentUser.name, role, officeId: officeId || null };
   sessionStorage.setItem('fv_user', JSON.stringify(currentUser));
+  // Apply view-only body class
+  if (isViewOnly()) {
+    document.body.classList.add('view-only-mode');
+    const banner = document.getElementById('viewOnlyBanner');
+    if (banner) banner.classList.add('visible');
+    const officeNameEl = document.getElementById('viewOnlyOfficeName');
+    if (officeNameEl && officeId) {
+      const office = BRANCH_OFFICES.find(o => o.id === officeId);
+      if (officeNameEl) officeNameEl.textContent = office ? office.name : '';
+    }
+  } else {
+    document.body.classList.remove('view-only-mode');
+    const banner = document.getElementById('viewOnlyBanner');
+    if (banner) banner.classList.remove('visible');
+  }
   updateUserChip();
   updateSelectionBar();
 }
@@ -158,7 +281,13 @@ function updateUserChip() {
   if (avatar) avatar.textContent = (currentUser.name || 'U')[0].toUpperCase();
   if (nameEl) nameEl.textContent = currentUser.name;
   if (roleEl) {
-    roleEl.textContent = currentUser.role === 'super_admin' ? 'Super Admin' : 'Admin';
+    const labels = {
+      super_admin:        'Super Admin',
+      admin:              'Admin',
+      kantor_cabang:      '🏢 KC',
+      kedeputian_wilayah: '🏛️ KW',
+    };
+    roleEl.textContent = labels[currentUser.role] || currentUser.role;
     roleEl.className = 'user-chip__role ' + currentUser.role;
   }
 }
@@ -846,14 +975,26 @@ function renderFiles() {
     // SEARCH MODE: show all matching files from whole repo
     fileGrid.innerHTML = '';
     emptySearch.classList.add('hidden');
-    if (searchResults.length === 0) {
+    let filtered = searchResults;
+    // View-only: filter to only files inside accessible folders
+    if (isViewOnly() && currentUser.officeId) {
+      filtered = searchResults.filter(node => {
+        let cur = node.parent ? getNode(node.parent) : null;
+        while (cur && cur.id !== 'root') {
+          if (isSharedWithOffice(cur.id, currentUser.officeId)) return true;
+          cur = cur.parent ? getNode(cur.parent) : null;
+        }
+        return false;
+      });
+    }
+    if (filtered.length === 0) {
       searchTermEl.textContent = currentSearchQuery;
       dropZone.classList.add('hidden');
       fileContainer.classList.add('hidden');
       emptySearch.classList.remove('hidden');
       return;
     }
-    items = searchResults;
+    items = filtered;
     dropZone.classList.add('hidden');
     fileContainer.classList.remove('hidden');
     items.forEach((node, i) => {
@@ -864,6 +1005,31 @@ function renderFiles() {
 
   // NORMAL MODE
   emptySearch.classList.add('hidden');
+
+  // View-only mode: show shared folders even if totalFiles == 0
+  if (isViewOnly() && currentUser.officeId) {
+    dropZone.classList.add('hidden');
+    fileContainer.classList.remove('hidden');
+    fileGrid.innerHTML = '';
+    const parent = currentPath ? getNode(currentPath) : repoRoot;
+    if (!parent) return;
+
+    // Filter children: only show folders accessible to this office
+    const accessible = parent.children.filter(node => {
+      if (node.type === 'folder') return officeCanAccessNode(node.id, currentUser.officeId);
+      // Show files only if current folder is directly shared
+      if (node.type === 'file' && currentPath) return officeCanAccessNode(currentPath, currentUser.officeId);
+      return false;
+    });
+    if (accessible.length === 0) {
+      fileGrid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted);">Tidak ada folder yang dibagikan ke kantor Anda</div>`;
+      return;
+    }
+    renderedNodes = accessible;
+    accessible.forEach((node, i) => fileGrid.appendChild(buildFileCard(node, i)));
+    return;
+  }
+
   const hasFiles = totalFiles > 0;
   if (!hasFiles) {
     dropZone.classList.remove('hidden');
@@ -933,7 +1099,32 @@ function buildFileCard(node, idx) {
   const hasFile = node.type === 'file' && node.file;
   const mediaClass = (node.type === 'file' && isMedia(node.name)) ? ' media-file' : '';
   const thumbClass = (hasFile && (isImg || isVid)) ? ' has-thumb' : '';
-  card.className = 'file-card' + (isSelected ? ' selected' : '') + mediaClass + thumbClass;
+
+  // Shared folder visual classes
+  let sharedClass = '';
+  let shareBadgeHtml = '';
+  if (node.type === 'folder') {
+    if (isFolderShared(node.id)) {
+      sharedClass = ' folder-shared';
+      const activeShares = getActiveShares(node.id);
+      const daysLeft = activeShares.length > 0
+        ? Math.ceil((Math.min(...activeShares.map(s => s.expiredAt)) - Date.now()) / (1000 * 60 * 60 * 24))
+        : 0;
+      const shareCount = activeShares.length;
+      shareBadgeHtml = `<span class="share-badge share-badge--active" title="Dibagikan ke ${shareCount} kantor · ${daysLeft} hari tersisa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="18" cy="5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="18" cy="19" r="2"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        ${shareCount}
+      </span>`;
+    } else if (isFolderExpiredShare(node.id)) {
+      sharedClass = ' folder-expired';
+      shareBadgeHtml = `<span class="share-badge share-badge--expired" title="Sharing telah berakhir">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        Expired
+      </span>`;
+    }
+  }
+
+  card.className = 'file-card' + (isSelected ? ' selected' : '') + mediaClass + thumbClass + sharedClass;
   card.style.animationDelay = Math.min(idx * 30, 300) + 'ms';
   card.dataset.id = node.id;
   card.dataset.idx = idx;
@@ -941,7 +1132,7 @@ function buildFileCard(node, idx) {
   let iconHtml, meta, badgeHtml = '', thumbHtml = '';
 
   if (node.type === 'folder') {
-    iconHtml = buildFolderIcon(48, false);
+    iconHtml = buildFolderIcon(48, false, sharedClass !== '');
     meta = `${node.children.length} item`;
   } else {
     const info = getFileInfo(node.name);
@@ -979,11 +1170,11 @@ function buildFileCard(node, idx) {
   // Build card content
   if (viewMode === 'list') {
     const listIcon = iconHtml || `<span class="file-card__thumb-sm">${thumbHtml}</span>`;
-    card.innerHTML = `${checkHtml}<span class="file-card__icon">${listIcon}</span><span class="file-card__name">${displayName}</span><span class="file-card__meta">${meta}</span>${badgeHtml}`;
+    card.innerHTML = `${checkHtml}${shareBadgeHtml}<span class="file-card__icon">${listIcon}</span><span class="file-card__name">${displayName}</span><span class="file-card__meta">${meta}</span>${badgeHtml}`;
   } else {
     if (thumbHtml) {
       // Grid with thumbnail: thumb on top, name below
-      card.innerHTML = `${checkHtml}${badgeHtml}${thumbHtml}<span class="file-card__name">${displayName}</span><span class="file-card__meta">${meta}</span>`;
+      card.innerHTML = `${checkHtml}${badgeHtml}${shareBadgeHtml}${thumbHtml}<span class="file-card__name">${displayName}</span><span class="file-card__meta">${meta}</span>`;
     } else {
       card.innerHTML = `${checkHtml}${badgeHtml}<span class="file-card__icon">${iconHtml}</span><span class="file-card__name">${displayName}</span><span class="file-card__meta">${meta}</span>`;
     }
@@ -1564,6 +1755,39 @@ function showContextMenu(x, y, node) {
   ctxTargetId = node.id;
   const isFolder = node.type === 'folder';
   const deleteLabel = isFolder ? 'Hapus Folder' : 'Hapus File';
+
+  // View-only users: only show Properties
+  if (isViewOnly()) {
+    ctxMenu.innerHTML = `
+      <div class="ctx-menu__item" id="ctxProperties">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Properties
+      </div>
+    `;
+    ctxMenu.style.display = 'block';
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
+    ctxMenu.style.left = Math.min(x, vw - mw - 8) + 'px';
+    ctxMenu.style.top = Math.min(y, vh - mh - 8) + 'px';
+    document.getElementById('ctxProperties').addEventListener('click', () => {
+      const n = getNode(ctxTargetId); hideContextMenu();
+      if (n) { showDetail(n); appLayout.classList.add('detail-open'); }
+    });
+    return;
+  }
+
+  const shareHtml = (isFolder && canShare()) ? `
+    <div class="ctx-menu__sep"></div>
+    <div class="ctx-menu__item share" id="ctxShare">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+      </svg>
+      Share To...
+    </div>` : '';
+
   const deleteHtml = canDelete() ? `
     <div class="ctx-menu__sep"></div>
     <div class="ctx-menu__item danger" id="ctxDelete">
@@ -1603,6 +1827,7 @@ function showContextMenu(x, y, node) {
       </svg>
       Pindahkan ke...
     </div>
+    ${shareHtml}
     ${deleteHtml}
   `;
 
@@ -1632,6 +1857,12 @@ function showContextMenu(x, y, node) {
     const id = ctxTargetId;
     hideContextMenu();
     openMoveModal([id]);
+  });
+  const ctxShare = document.getElementById('ctxShare');
+  if (ctxShare) ctxShare.addEventListener('click', () => {
+    const id = ctxTargetId;
+    hideContextMenu();
+    openShareModal(id);
   });
   const ctxDel = document.getElementById('ctxDelete');
   if (ctxDel) ctxDel.addEventListener('click', () => {
@@ -2581,9 +2812,11 @@ if (sidebarRecycleBtn) sidebarRecycleBtn.addEventListener('click', () => {
 // ── Role Switch (demo) ───────────────────────────
 const btnSwitchRole = document.getElementById('btnSwitchRole');
 if (btnSwitchRole) btnSwitchRole.addEventListener('click', () => {
-  const next = currentUser.role === 'super_admin' ? 'admin' : 'super_admin';
+  const roles = ['super_admin', 'admin'];
+  const idx = roles.indexOf(currentUser.role);
+  const next = roles[(idx + 1) % roles.length];
   setRole(next, currentUser.name);
-  showToast(`🔄 Role diganti ke: ${next === 'super_admin' ? 'Super Admin' : 'Admin'}`, 'success');
+  showToast(`🔄 Role: ${next === 'super_admin' ? 'Super Admin' : 'Admin'}`, 'success');
 });
 
 // ── Login Flow ───────────────────────────────────
@@ -2591,14 +2824,57 @@ const loginOverlay = document.getElementById('loginOverlay');
 const loginBtn = document.getElementById('loginBtn');
 const loginNameInput = document.getElementById('loginName');
 
+// Populate office selector from BRANCH_OFFICES
+(function initOfficePicker() {
+  const wrap = document.getElementById('officeSelectorWrap');
+  const sel  = document.getElementById('officeSelector');
+  const lbl  = document.getElementById('officeSelectorLabel');
+  if (!wrap || !sel) return;
+
+  // Show/hide office picker based on selected role
+  function updateOfficePicker() {
+    const roleEl = document.querySelector('input[name="loginRole"]:checked');
+    const role = roleEl ? roleEl.value : '';
+    const isBranch = role === 'kantor_cabang' || role === 'kedeputian_wilayah';
+    wrap.classList.toggle('visible', isBranch);
+    if (lbl) lbl.textContent = role === 'kedeputian_wilayah' ? 'Pilih Kedeputian Wilayah' : 'Pilih Kantor Cabang';
+
+    // Re-populate options based on role type
+    const typeFilter = role === 'kedeputian_wilayah' ? 'wilayah' : 'cabang';
+    sel.innerHTML = `<option value="">— Pilih kantor —</option>`;
+    BRANCH_OFFICES.filter(o => o.type === typeFilter).forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.id;
+      opt.textContent = o.name;
+      sel.appendChild(opt);
+    });
+  }
+
+  document.querySelectorAll('input[name="loginRole"]').forEach(r => {
+    r.addEventListener('change', updateOfficePicker);
+  });
+  updateOfficePicker();
+})();
+
 function doLogin() {
   const name = (loginNameInput ? loginNameInput.value.trim() : '') || 'User';
   const roleEl = document.querySelector('input[name="loginRole"]:checked');
   const role = roleEl ? roleEl.value : 'admin';
-  setRole(role, name);
+
+  // Validate office selection for branch roles
+  const isBranch = role === 'kantor_cabang' || role === 'kedeputian_wilayah';
+  const officeSelector = document.getElementById('officeSelector');
+  const officeId = officeSelector ? officeSelector.value : '';
+  if (isBranch && !officeId) {
+    showToast('⚠️ Pilih kantor terlebih dahulu', 'error');
+    return;
+  }
+
+  setRole(role, name, officeId || null);
   if (loginOverlay) loginOverlay.classList.add('hidden');
-  sessionStorage.setItem('fv_user', JSON.stringify({ name, role }));
+  sessionStorage.setItem('fv_user', JSON.stringify({ name, role, officeId: officeId || null }));
   showToast(`✅ Selamat datang, ${name}!`, 'success');
+  refreshUI();
 }
 
 // Auto-restore session
@@ -2608,6 +2884,17 @@ if (savedUser) {
     const u = JSON.parse(savedUser);
     currentUser = u;
     updateUserChip();
+    // Re-apply view-only mode if branch role
+    if (u.role === 'kantor_cabang' || u.role === 'kedeputian_wilayah') {
+      document.body.classList.add('view-only-mode');
+      const banner = document.getElementById('viewOnlyBanner');
+      if (banner) banner.classList.add('visible');
+      const officeNameEl = document.getElementById('viewOnlyOfficeName');
+      if (officeNameEl && u.officeId) {
+        const office = BRANCH_OFFICES.find(o => o.id === u.officeId);
+        if (officeNameEl) officeNameEl.textContent = office ? office.name : '';
+      }
+    }
     if (loginOverlay) loginOverlay.classList.add('hidden');
   } catch { /* ignore */ }
 }
@@ -2615,6 +2902,8 @@ if (savedUser) {
 if (loginBtn) loginBtn.addEventListener('click', doLogin);
 if (loginNameInput) loginNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
+// Load share registry before first render
+loadShareRegistry();
 refreshUI();
 
 // ================================================
@@ -2681,3 +2970,210 @@ async function downloadNodes(ids) {
     }
   }
 }
+
+// ================================================
+//  SHARE TO MODAL
+// ================================================
+let _shareTargetId = null;
+let _shareSelectedOffices = []; // [{officeId, name, type}]
+
+function openShareModal(nodeId) {
+  const node = getNode(nodeId);
+  if (!node || node.type !== 'folder') return;
+  _shareTargetId = nodeId;
+  _shareSelectedOffices = [];
+
+  // Set header info
+  const titleEl = document.getElementById('shareModalFolderName');
+  if (titleEl) titleEl.textContent = String.fromCodePoint(0x1F4C1) + ' ' + node.name;
+
+  // Set default expire date = 30 days from today
+  const dateInput = document.getElementById('shareExpireDate');
+  if (dateInput) {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    dateInput.min = new Date().toISOString().split('T')[0];
+    dateInput.value = d.toISOString().split('T')[0];
+    document.querySelectorAll('.share-preset-btn').forEach(b => b.classList.remove('active'));
+    const preset30 = document.querySelector('.share-preset-btn[data-days="30"]');
+    if (preset30) preset30.classList.add('active');
+  }
+
+  // Render search list & chips
+  _renderShareOfficeList('');
+  _renderShareChips();
+  _renderCurrentShares(nodeId);
+
+  // Clear search
+  const searchEl = document.getElementById('shareSearchInput');
+  if (searchEl) searchEl.value = '';
+
+  _updateShareConfirmBtn();
+
+  document.getElementById('shareModal').classList.remove('hidden');
+  setTimeout(() => { if (searchEl) searchEl.focus(); }, 80);
+}
+
+function closeShareModal() {
+  document.getElementById('shareModal').classList.add('hidden');
+  _shareTargetId = null;
+  _shareSelectedOffices = [];
+}
+
+function _renderShareOfficeList(query) {
+  const list = document.getElementById('shareOfficeList');
+  if (!list) return;
+  const q = query.toLowerCase().trim();
+  const filtered = BRANCH_OFFICES.filter(o =>
+    !q || o.name.toLowerCase().includes(q) || o.type.includes(q)
+  );
+  list.innerHTML = '';
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">Tidak ada hasil</div>';
+    return;
+  }
+  filtered.forEach(office => {
+    const isSelected = _shareSelectedOffices.some(s => s.officeId === office.id);
+    const item = document.createElement('div');
+    item.className = 'share-office-item' + (isSelected ? ' already-selected' : '');
+    item.innerHTML =
+      '<span class="share-office-type-badge ' + office.type + '">' + (office.type === 'cabang' ? 'KC' : 'KW') + '</span>' +
+      '<span style="flex:1">' + escapeHtml(office.name) + '</span>' +
+      '<svg class="share-office-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+    item.addEventListener('click', () => {
+      if (isSelected) {
+        _shareSelectedOffices = _shareSelectedOffices.filter(s => s.officeId !== office.id);
+      } else {
+        _shareSelectedOffices.push({ officeId: office.id, name: office.name, type: office.type });
+      }
+      _renderShareOfficeList(document.getElementById('shareSearchInput') ? document.getElementById('shareSearchInput').value : '');
+      _renderShareChips();
+      _updateShareConfirmBtn();
+    });
+    list.appendChild(item);
+  });
+}
+
+function _renderShareChips() {
+  const area = document.getElementById('shareChipsArea');
+  if (!area) return;
+  area.innerHTML = '';
+  if (!_shareSelectedOffices.length) {
+    area.innerHTML = '<span class="share-chips-empty">Belum ada kantor dipilih</span>';
+    return;
+  }
+  _shareSelectedOffices.forEach(sel => {
+    const chip = document.createElement('span');
+    chip.className = 'share-chip';
+    chip.innerHTML = escapeHtml(sel.name) + '<button class="share-chip__remove" title="Hapus">✕</button>';
+    chip.querySelector('.share-chip__remove').addEventListener('click', () => {
+      _shareSelectedOffices = _shareSelectedOffices.filter(s => s.officeId !== sel.officeId);
+      _renderShareOfficeList(document.getElementById('shareSearchInput') ? document.getElementById('shareSearchInput').value : '');
+      _renderShareChips();
+      _updateShareConfirmBtn();
+    });
+    area.appendChild(chip);
+  });
+}
+
+function _renderCurrentShares(nodeId) {
+  const section = document.getElementById('currentSharesSection');
+  const list = document.getElementById('currentSharesList');
+  if (!section || !list) return;
+  const reg = shareRegistry[nodeId];
+  if (!reg || !reg.shares || !reg.shares.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  list.innerHTML = '';
+  const now = Date.now();
+  reg.shares.forEach(share => {
+    const office = BRANCH_OFFICES.find(o => o.id === share.officeId);
+    const officeName = office ? office.name : share.officeId;
+    const expDate = new Date(share.expiredAt);
+    const daysLeft = Math.ceil((share.expiredAt - now) / (1000 * 60 * 60 * 24));
+    const isExpired = share.expiredAt <= now;
+    const isExpiring = !isExpired && daysLeft <= 7;
+    const expiryClass = isExpired ? 'expired' : (isExpiring ? 'expiring' : 'valid');
+    const expiryText = isExpired ? 'Expired' : (daysLeft + ' hari lagi (' + expDate.toLocaleDateString('id-ID', {day:'numeric',month:'short',year:'numeric'}) + ')');
+    const item = document.createElement('div');
+    item.className = 'current-share-item';
+    item.innerHTML =
+      '<span class="current-share-item__name">' + escapeHtml(officeName) + '</span>' +
+      '<span class="current-share-item__expiry ' + expiryClass + '">' + expiryText + '</span>' +
+      '<button class="current-share-item__revoke" data-office="' + escapeHtml(share.officeId) + '">✕</button>';
+    item.querySelector('.current-share-item__revoke').addEventListener('click', function() {
+      revokeShare(nodeId, this.dataset.office);
+      _renderCurrentShares(nodeId);
+    });
+    list.appendChild(item);
+  });
+}
+
+function _updateShareConfirmBtn() {
+  const btn = document.getElementById('shareModalConfirm');
+  if (!btn) return;
+  const dateInput = document.getElementById('shareExpireDate');
+  btn.disabled = !(_shareSelectedOffices.length > 0 && dateInput && dateInput.value);
+}
+
+function revokeShare(nodeId, officeId) {
+  const reg = shareRegistry[nodeId];
+  if (!reg || !reg.shares) return;
+  reg.shares = reg.shares.filter(s => s.officeId !== officeId);
+  if (!reg.shares.length) delete shareRegistry[nodeId];
+  saveShareRegistry();
+  refreshUI();
+  showToast('\uD83D\uDD12 Akses dicabut', 'success');
+}
+
+function saveShare() {
+  if (!_shareTargetId || !_shareSelectedOffices.length) return;
+  const dateInput = document.getElementById('shareExpireDate');
+  if (!dateInput || !dateInput.value) { showToast('\u26A0\uFE0F Pilih tanggal expired', 'error'); return; }
+  const expiredAt = new Date(dateInput.value).getTime() + (24 * 60 * 60 * 1000 - 1);
+  if (expiredAt <= Date.now()) { showToast('\u26A0\uFE0F Tanggal harus di masa depan', 'error'); return; }
+  if (!shareRegistry[_shareTargetId]) {
+    shareRegistry[_shareTargetId] = { shares: [], sharedAt: Date.now(), sharedBy: currentUser.name };
+  }
+  const reg = shareRegistry[_shareTargetId];
+  _shareSelectedOffices.forEach(sel => {
+    reg.shares = reg.shares.filter(s => s.officeId !== sel.officeId);
+    reg.shares.push({ officeId: sel.officeId, expiredAt, sharedAt: Date.now(), sharedBy: currentUser.name });
+  });
+  saveShareRegistry();
+  closeShareModal();
+  refreshUI();
+  const expStr = new Date(expiredAt).toLocaleDateString('id-ID', {day:'numeric',month:'long',year:'numeric'});
+  showToast('\u2705 Folder dibagikan ke ' + _shareSelectedOffices.length + ' kantor hingga ' + expStr, 'success');
+}
+
+// Wire share modal controls
+(function wireShareModal() {
+  const modal = document.getElementById('shareModal');
+  const closeBtn = document.getElementById('shareModalClose');
+  const cancelBtn = document.getElementById('shareModalCancel');
+  const confirmBtn = document.getElementById('shareModalConfirm');
+  const searchInput = document.getElementById('shareSearchInput');
+  const dateInput = document.getElementById('shareExpireDate');
+  if (closeBtn) closeBtn.addEventListener('click', closeShareModal);
+  if (cancelBtn) cancelBtn.addEventListener('click', closeShareModal);
+  if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) closeShareModal(); });
+  if (confirmBtn) confirmBtn.addEventListener('click', saveShare);
+  if (searchInput) searchInput.addEventListener('input', function() { _renderShareOfficeList(searchInput.value); });
+  if (dateInput) dateInput.addEventListener('change', function() {
+    _updateShareConfirmBtn();
+    document.querySelectorAll('.share-preset-btn').forEach(b => b.classList.remove('active'));
+  });
+  document.querySelectorAll('.share-preset-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const days = parseInt(btn.dataset.days);
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      if (dateInput) { dateInput.value = d.toISOString().split('T')[0]; _updateShareConfirmBtn(); }
+      document.querySelectorAll('.share-preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) closeShareModal();
+  });
+})();
